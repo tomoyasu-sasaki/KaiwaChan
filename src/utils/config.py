@@ -11,7 +11,7 @@ class Config:
         self.default_config = {
             "models": {
                 "whisper": "base",
-                "llama": str(self.root_dir / "models" / "llama-2-7b-chat.gguf"),
+                "llama": str(self.root_dir / "models" / "granite-3.1-8b-instruct-Q4_K_M.gguf"),
                 "voicevox_engine_path": ""
             },
             "audio": {
@@ -38,4 +38,6 @@ class Config:
 
     def get_model_path(self, model_name):
         """モデルの絶対パスを取得"""
+        if isinstance(self.config["models"][model_name], dict):
+            return Path(self.config["models"][model_name]["path"])
         return Path(self.config["models"][model_name]) 

@@ -11,13 +11,13 @@ class ModelDownloader:
 
     def download_llama(self):
         """
-        1. https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct にアクセス
+        1. https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF にアクセス
         2. Files and versionsタブを開く
-        3. モデルファイル（.gguf形式）をダウンロード
+        3. granite-3.1-8b-instruct-Q4_K_M.ggufをダウンロード
         4. modelsディレクトリに配置
         """
-        model_path = self.models_dir / "llama-2-7b-chat.gguf"
-        print(f"LLaMAモデルを {model_path} に配置してください")
+        model_path = self.models_dir / "granite-3.1-8b-instruct-Q4_K_M.gguf"
+        print(f"Graniteモデルを {model_path} に配置してください")
 
     def setup_voicevox(self):
         """
