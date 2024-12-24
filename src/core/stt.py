@@ -2,43 +2,36 @@ import whisper
 import sounddevice as sd
 import numpy as np
 from scipy import signal as sig
+from ..utils.logger import Logger
 
 class SpeechRecognizer:
     def __init__(self, config):
         self.model = whisper.load_model("base")
         self.sample_rate = config.config["audio"]["sample_rate"]
         self.duration = config.config["audio"]["duration"]
+        self.logger = Logger(config)
         
     def record_audio(self):
         try:
-            # バッファサイズを明示的に計算
-            num_samples = int(self.duration * self.sample_rate)
-            
-            # 録音
-            recording = sd.rec(
-                num_samples,
+            # オーディオストリームの初期化
+            stream = sd.InputStream(
                 samplerate=self.sample_rate,
                 channels=1,
                 dtype=np.float32,
-                blocking=True  # 録音完了まで待機
+                blocksize=int(self.sample_rate * self.duration)
             )
             
-            # 音声データの前処理
-            audio = np.squeeze(recording)  # 余分な次元を削除
-            
-            # パディングを追加して201サンプルにする
-            if len(audio) < 201:
-                padding = np.zeros(201 - len(audio))
-                audio = np.concatenate([audio, padding])
-            else:
-                # リサンプリングして201サンプルにする
-                audio = sig.resample(audio, 201)
-            
-            # 正規化
-            audio = audio / (np.max(np.abs(audio)) + 1e-7)
-            
-            return audio.reshape(1, -1)  # [1, 201]の形状に整形
-            
+            with stream:
+                self.logger.info("録音を開始します...")
+                audio_data, _ = stream.read(int(self.sample_rate * self.duration))
+                self.logger.info("録音が完了しました")
+                
+                # 音声データの前処理
+                audio = np.squeeze(audio_data)
+                audio = audio / (np.max(np.abs(audio)) + 1e-7)
+                
+                return audio.reshape(1, -1)
+                
         except Exception as e:
             self.logger.error(f"録音エラー: {str(e)}")
             raise

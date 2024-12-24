@@ -36,9 +36,6 @@ class MainWindow(QMainWindow):
         self.config = Config()
         self.logger = Logger(self.config)
         
-        # シグナルハンドラの設定
-        signal.signal(signal.SIGINT, self._signal_handler)
-        
         self.setWindowTitle("KaiwaChan")
         self.setMinimumSize(800, 600)
         
@@ -82,7 +79,7 @@ class MainWindow(QMainWindow):
         
     def _handle_response(self, response):
         self.text_display.append(f"Response: {response}")
-        self.logger.info(f"��答生成: {response}")
+        self.logger.info(f"対話生成: {response}")
         
     def _handle_error(self, error_msg):
         self.logger.error(f"エラー発生: {error_msg}")
@@ -111,9 +108,3 @@ class MainWindow(QMainWindow):
             self.thread.wait()
         
         self.logger.info("シャットダウン完了")
-
-    def _signal_handler(self, signum, frame):
-        """Ctrl+C シグナルハンドラ"""
-        self.logger.info("Ctrl+C が検出されました")
-        self.close()
-        QApplication.quit()
