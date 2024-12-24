@@ -1,0 +1,22 @@
+# 音声認識
+whisper-openai>=1.0.0
+pyaudio>=0.2.13
+sounddevice>=0.4.6
+
+# 音声合成
+voicevox-client>=0.1.4
+soundfile>=0.12.1
+
+# UI
+PyQt6>=6.5.0
+
+# LLM
+llama-cpp-python>=0.2.0
+
+# ユーティリティ
+numpy>=1.24.0
+python-dotenv>=1.0.0 
+pyyaml>=6.0.1
+requests>=2.31.0
+tqdm>=4.66.1
+scipy>=1.11.0

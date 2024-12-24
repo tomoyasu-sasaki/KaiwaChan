@@ -1,0 +1,10 @@
+audio:
+  duration: 5
+  sample_rate: 16000
+models:
+  llama: models/llama-2-7b-chat.gguf
+  voicevox_engine_path: ''
+  whisper: base
+paths:
+  logs: logs
+  models: models
