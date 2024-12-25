@@ -15,6 +15,7 @@ KaiwaChanは、プライバシーを重視したローカル完結型の音声�
 - ログ機能
 
 ### システム構成
+```
 KaiwaChan/
 ├── src/
 │ ├── core/ # コア機能
@@ -29,6 +30,7 @@ KaiwaChan/
 ├── models/ # モデルファイル
 ├── logs/ # ログファイル
 └── config.yml # 設定ファイル
+```
 
 ### 使用技術
 - **音声認識**: OpenAI Whisper
