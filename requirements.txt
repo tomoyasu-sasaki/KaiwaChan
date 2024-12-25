@@ -20,3 +20,7 @@ pyyaml>=6.0.1
 requests>=2.31.0
 tqdm>=4.66.1
 scipy>=1.11.0
+
+# Phase 2で追加される依存関係
+pygame>=2.5.0
+pillow>=10.0.0  # 画像処理用

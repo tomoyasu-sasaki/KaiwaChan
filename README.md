@@ -168,3 +168,27 @@ python -m src.main
 - **requests**: VOICEVOXとの通信
 - **yaml**: 設定ファイルの処理
 - **logging**: システムログの管理
+
+## 開発状況
+
+### Phase 1 ✅
+- 基本的な音声認識/合成
+- 対話生成
+- UIの基本実装
+
+### Phase 2 🚧
+- キャラクター表示システム
+- アニメーション制御
+- 音声同期
+
+## ライセンス
+MIT License
+
+## 貢献
+プルリクエストやイシューの報告を歓迎します。
+
+## 謝辞
+- [Whisper](https://github.com/openai/whisper)
+- [VOICEVOX](https://voicevox.hiroshiba.jp/)
+- [LLaMA](https://github.com/facebookresearch/llama)
+- [PyGame](https://www.pygame.org/)

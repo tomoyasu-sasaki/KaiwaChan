@@ -17,3 +17,17 @@ models:
 paths:
   logs: logs
   models: models
+character:
+  default_id: "default"
+  models_dir: "models/live2d"
+  expressions:
+    - neutral
+    - happy
+    - sad
+    - angry
+    - surprised
+  motions:
+    - idle
+    - talking
+    - thinking
+    - nodding
