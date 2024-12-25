@@ -6,6 +6,7 @@ from pathlib import Path
 import time
 import requests.exceptions
 from ..utils.logger import Logger
+import sounddevice as sd
 
 class TTSEngine:
     def __init__(self, config):
@@ -20,6 +21,8 @@ class TTSEngine:
         self.cache_dir = Path("cache/tts")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache = {}
+        
+        self.sample_rate = 24000  # VOICEVOXのデフォルトサンプルレート
         
     def synthesize(self, text):
         # キャッシュチェック
@@ -55,7 +58,10 @@ class TTSEngine:
                 with open(audio_path, "wb") as f:
                     f.write(synthesis.content)
                 
-                self.logger.info(f"✅ 音声合成完了: {audio_path}")
+                # 音声を再生
+                self._play_audio(audio_path)
+                
+                self.logger.info(f"✅ 音声合成・再生完了: {audio_path}")
                 return str(audio_path)
                 
             except requests.exceptions.RequestException as e:
@@ -64,3 +70,14 @@ class TTSEngine:
                     self.logger.error("❌ 音声合成に失敗しました")
                     raise Exception(f"VOICEVOX Engine Error: {str(e)}")
                 time.sleep(self.retry_delay) 
+
+    def _play_audio(self, audio_path):
+        """音声ファイルを再生"""
+        try:
+            self.logger.info("🔊 音声を再生中...")
+            data, samplerate = sf.read(audio_path)
+            sd.play(data, samplerate)
+            sd.wait()  # 再生完了まで待機
+        except Exception as e:
+            self.logger.error(f"音声再生エラー: {str(e)}")
+            raise 

@@ -102,9 +102,13 @@ class MainWindow(QMainWindow):
         if temp_audio.exists():
             temp_audio.unlink()
         
-        # スレッドの終了待機
-        if hasattr(self, 'thread') and self.thread.isRunning():
+        # スレッドの存在確認と型チェックを追加
+        if hasattr(self, 'thread') and isinstance(self.thread, QThread) and self.thread.isRunning():
             self.thread.quit()
             self.thread.wait()
         
         self.logger.info("シャットダウン完了")
+
+    def initialize_thread(self):
+        self.thread = QThread()  # 正しくQThreadとして初期化
+        # ... 他のスレッド設定 ...
