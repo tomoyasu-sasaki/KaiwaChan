@@ -31,3 +31,13 @@ character:
     - talking
     - thinking
     - nodding
+  window:
+    width: 400
+    height: 600
+  fps: 30
+  expressions:
+    - neutral
+    - happy
+    - sad
+    - mouth_open
+    - mouth_closed
