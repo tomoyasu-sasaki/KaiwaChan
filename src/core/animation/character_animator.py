@@ -115,14 +115,7 @@ class CharacterAnimator:
     def _load_default_character(self):
         """デフォルトキャラクターの読み込み"""
         try:
-            # 利用可能なキャラクターのリストを取得
-            available_characters = self.sprite_manager.get_available_characters()
-            
-            if not available_characters:
-                self.logger.warning("利用可能なキャラクターが見つかりません")
-                return
-            
-            # 設定からデフォルトキャラクターを取得（存在しない場合は最初のキャラクター）
+            # 設定からデフォルトキャラクターを取得
             default_character = "default"
             
             if self.settings:
@@ -137,20 +130,31 @@ class CharacterAnimator:
                     if 'character' in self.settings.config:
                         default_character = self.settings.config['character'].get('default_id', default_character)
             
-            # 指定されたキャラクターが存在しなければ最初のキャラクターを使用
-            if default_character not in available_characters and available_characters:
-                default_character = available_characters[0]
+            self.logger.debug(f"デフォルトキャラクターID: {default_character}")
             
-            # キャラクターの読み込み
-            success = self.sprite_manager.load_character(default_character)
-            if success:
+            # デフォルトキャラクターのロードを試みる
+            if self.sprite_manager.load_character_if_exists(default_character):
+                self.logger.info(f"デフォルトキャラクター '{default_character}' をロードしました")
                 self.current_character = default_character
-                self.logger.info(f"デフォルトキャラクター{default_character}を読み込みました")
-            else:
-                self.logger.error(f"デフォルトキャラクター{default_character}の読み込みに失敗しました")
-        
+                return
+                
+            # デフォルトキャラクターが見つからない場合、利用可能なキャラクターから選択
+            available_characters = self.sprite_manager.get_available_characters()
+            
+            if not available_characters:
+                self.logger.warning("利用可能なキャラクターが見つかりません")
+                return
+                
+            # 最初に見つかったキャラクターを使用
+            alternate_character = available_characters[0]
+            if alternate_character != default_character:
+                self.logger.warning(f"デフォルトキャラクター '{default_character}' が見つかりません。代わりに '{alternate_character}' を使用します")
+            
+            self.sprite_manager.load_character(alternate_character)
+            self.current_character = alternate_character
+            
         except Exception as e:
-            self.logger.error(f"デフォルトキャラクターの読み込みエラー: {e}")
+            self.logger.error(f"デフォルトキャラクターのロードに失敗: {e}")
     
     def update(self):
         """
@@ -194,11 +198,16 @@ class CharacterAnimator:
         # 基本表情を取得
         base_sprite_name = self.current_emotion
         if self.blinking:
-            base_sprite_name = f"{self.current_emotion}_blink"
-            if not self.sprite_manager.get_sprite(self.current_character, base_sprite_name):
-                base_sprite_name = "blink"  # フォールバック
-                if not self.sprite_manager.get_sprite(self.current_character, base_sprite_name):
-                    base_sprite_name = self.current_emotion  # さらにフォールバック
+            blink_sprite_name = f"{self.current_emotion}_blink"
+            # まばたきスプライトが存在するか確認
+            has_specific_blink = self.sprite_manager.get_sprite(self.current_character, blink_sprite_name, show_warning=False)
+            has_generic_blink = self.sprite_manager.get_sprite(self.current_character, "blink", show_warning=False)
+            
+            if has_specific_blink:
+                base_sprite_name = blink_sprite_name
+            elif has_generic_blink:
+                base_sprite_name = "blink"
+            # まばたきスプライトがない場合は通常の表情を使用（警告なし）
         
         base_sprite = self.sprite_manager.get_sprite(self.current_character, base_sprite_name)
         if not base_sprite:

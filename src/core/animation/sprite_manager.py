@@ -26,6 +26,9 @@ class SpriteManager:
         self.logger = logging.getLogger(__name__)
         self.settings = settings
         
+        # スプライトディクショナリの初期化
+        self.sprites = {}
+        
         # Pygameの初期化（必要な場合）
         if not pygame.get_init():
             pygame.init()
@@ -36,34 +39,105 @@ class SpriteManager:
         self.characters_dir = self.images_dir / "characters"
         
         # 設定から値を読み込み
+        custom_assets = None
+        
         if settings:
             # 新しいSettingsManagerクラス
             if hasattr(settings, 'get_app_config'):
+                # animationセクション
                 custom_assets = settings.get_app_config('animation', 'assets_dir', None)
                 if custom_assets:
+                    self.logger.debug(f"animationセクションから取得したカスタムアセットパス: {custom_assets}")
                     self.base_assets_dir = Path(custom_assets)
+                
+                # characterセクション
+                if not custom_assets:
+                    custom_assets = settings.get_app_config('character', 'assets_dir', None)
+                    if custom_assets:
+                        self.logger.debug(f"characterセクションから取得したカスタムアセットパス: {custom_assets}")
+                        self.base_assets_dir = Path(custom_assets)
+                
+                # 明示的に画像ディレクトリとキャラクターディレクトリが設定されているか確認
+                custom_images = settings.get_app_config('character', 'images_dir', None)
+                if custom_images:
+                    self.logger.debug(f"characterセクションから取得した画像ディレクトリパス: {custom_images}")
+                    self.images_dir = Path(custom_images)
+                
+                custom_characters = settings.get_app_config('character', 'characters_dir', None)
+                if custom_characters:
+                    self.logger.debug(f"characterセクションから取得したキャラクターディレクトリパス: {custom_characters}")
+                    self.characters_dir = Path(custom_characters)
+            
             # AppConfigやget()メソッドを持つその他の設定クラス
             elif hasattr(settings, 'get'):
+                # animationセクション
                 custom_assets = settings.get('animation', 'assets_dir', None)
                 if custom_assets:
+                    self.logger.debug(f"animationセクションから取得したカスタムアセットパス: {custom_assets}")
                     self.base_assets_dir = Path(custom_assets)
+                
+                # characterセクション
+                if not custom_assets:
+                    custom_assets = settings.get('character', 'assets_dir', None)
+                    if custom_assets:
+                        self.logger.debug(f"characterセクションから取得したカスタムアセットパス: {custom_assets}")
+                        self.base_assets_dir = Path(custom_assets)
+                
+                # 明示的に画像ディレクトリとキャラクターディレクトリが設定されているか確認
+                custom_images = settings.get('character', 'images_dir', None)
+                if custom_images:
+                    self.logger.debug(f"characterセクションから取得した画像ディレクトリパス: {custom_images}")
+                    self.images_dir = Path(custom_images)
+                
+                custom_characters = settings.get('character', 'characters_dir', None)
+                if custom_characters:
+                    self.logger.debug(f"characterセクションから取得したキャラクターディレクトリパス: {custom_characters}")
+                    self.characters_dir = Path(custom_characters)
+            
             # 古いConfigクラス
             elif hasattr(settings, 'root_dir') and hasattr(settings, 'config'):
+                self.logger.debug(f"古いConfigクラスから取得したルートディレクトリ: {settings.root_dir}")
                 self.base_assets_dir = Path(settings.root_dir) / "assets"
+                
+                # 設定ファイルからキャラクター関連のパスを確認
+                if hasattr(settings, 'config') and isinstance(settings.config, dict):
+                    if 'character' in settings.config:
+                        char_config = settings.config['character']
+                        if 'assets_dir' in char_config:
+                            self.base_assets_dir = Path(char_config['assets_dir'])
+                            self.logger.debug(f"configから取得したカスタムアセットパス: {self.base_assets_dir}")
+                        if 'images_dir' in char_config:
+                            self.images_dir = Path(char_config['images_dir'])
+                            self.logger.debug(f"configから取得した画像ディレクトリパス: {self.images_dir}")
+                        if 'characters_dir' in char_config:
+                            self.characters_dir = Path(char_config['characters_dir'])
+                            self.logger.debug(f"configから取得したキャラクターディレクトリパス: {self.characters_dir}")
+        
+        self.logger.debug(f"base_assets_dirの初期設定: {self.base_assets_dir}")
         
         # ディレクトリパスの更新
-        self.images_dir = self.base_assets_dir / "images"
-        self.characters_dir = self.images_dir / "characters"
+        # base_assets_dirが既に"images"を含んでいるか確認
+        if self.base_assets_dir.name == "images" or str(self.base_assets_dir).endswith("/images"):
+            self.images_dir = self.base_assets_dir
+            self.logger.debug(f"base_assets_dirが既にimagesを含んでいます: {self.base_assets_dir}")
+        else:
+            self.images_dir = self.base_assets_dir / "images"
+            
+        # characters_dirも適切に設定
+        if self.images_dir.name == "characters" or str(self.images_dir).endswith("/characters"):
+            self.characters_dir = self.images_dir
+            self.logger.debug(f"images_dirが既にcharactersを含んでいます: {self.images_dir}")
+        else:
+            self.characters_dir = self.images_dir / "characters"
+            
+        self.logger.debug(f"設定されたディレクトリパス: base_assets_dir={self.base_assets_dir}, images_dir={self.images_dir}, characters_dir={self.characters_dir}")
                 
         # ディレクトリが存在しない場合は作成
         self.images_dir.mkdir(parents=True, exist_ok=True)
         self.characters_dir.mkdir(parents=True, exist_ok=True)
         
-        # キャラクター画像の辞書
-        self.sprites: Dict[str, Dict[str, pygame.Surface]] = {}
-        
         # デフォルトの画像サイズ
-        self.default_size = (300, 400)
+        self.default_size = (300, 300)
         
         # 設定から値を読み込み
         if settings:
@@ -89,7 +163,13 @@ class SpriteManager:
                         # キャラクターのサイズはウィンドウより少し小さく
                         self.default_size = (int(width * 0.75), int(height * 0.75))
         
-        self.logger.info(f"SpriteManagerを初期化しました: {self.base_assets_dir}")
+        # 初期化時のロギング
+        self.logger.info(f"SpriteManagerを初期化しました: {self.characters_dir}")
+        
+        # 利用可能なキャラクターを確認
+        available = self.get_available_characters()
+        if available:
+            self.logger.info(f"利用可能なキャラクター: {available}")
     
     def load_character(self, character_id: str, directory: Optional[Path] = None) -> bool:
         """
@@ -142,24 +222,27 @@ class SpriteManager:
             self.logger.error(f"キャラクター{character_id}の読み込みに失敗: {e}")
             return False
     
-    def get_sprite(self, character_id: str, sprite_name: str) -> Optional[pygame.Surface]:
+    def get_sprite(self, character_id: str, sprite_name: str, show_warning: bool = True) -> Optional[pygame.Surface]:
         """
         指定されたキャラクターの指定されたスプライトを取得
         
         Args:
             character_id: キャラクターID
             sprite_name: スプライト名
+            show_warning: スプライトが見つからない場合に警告を表示するかどうか
             
         Returns:
             スプライト（pygame.Surface）、見つからない場合はNone
         """
         try:
             if character_id not in self.sprites:
-                self.logger.warning(f"キャラクター{character_id}は読み込まれていません")
+                if show_warning:
+                    self.logger.warning(f"キャラクター{character_id}は読み込まれていません")
                 return None
                 
             if sprite_name not in self.sprites[character_id]:
-                self.logger.warning(f"スプライト{sprite_name}はキャラクター{character_id}に存在しません")
+                if show_warning:
+                    self.logger.warning(f"スプライト{sprite_name}はキャラクター{character_id}に存在しません")
                 return None
                 
             return self.sprites[character_id][sprite_name]
@@ -218,14 +301,27 @@ class SpriteManager:
         available_characters = []
         
         # 事前に読み込まれたキャラクター
-        available_characters.extend(list(self.sprites.keys()))
+        loaded_characters = list(self.sprites.keys())
+        if loaded_characters:
+            self.logger.debug(f"事前に読み込まれたキャラクター: {loaded_characters}")
+            available_characters.extend(loaded_characters)
         
         # ディレクトリ内の未読み込みキャラクター
         if self.characters_dir.exists():
+            self.logger.debug(f"キャラクターディレクトリを検索: {self.characters_dir}")
             for subdir in self.characters_dir.iterdir():
                 if subdir.is_dir() and subdir.name not in available_characters:
-                    if any(subdir.glob("*.png")):
+                    png_files = list(subdir.glob("*.png"))
+                    if png_files:
+                        self.logger.debug(f"キャラクター '{subdir.name}' を検出: PNG画像 {len(png_files)} 件")
                         available_characters.append(subdir.name)
+                    else:
+                        self.logger.debug(f"キャラクターディレクトリ '{subdir.name}' にPNG画像がありません")
+            
+            if not available_characters:
+                self.logger.warning(f"キャラクターディレクトリ '{self.characters_dir}' に有効なキャラクターが見つかりません")
+        else:
+            self.logger.warning(f"キャラクターディレクトリが存在しません: {self.characters_dir}")
         
         return available_characters
     
@@ -267,3 +363,34 @@ class SpriteManager:
         except Exception as e:
             self.logger.error(f"スプライトのリサイズに失敗: {e}")
             return sprite  # エラー時は元のスプライトを返す 
+    
+    def load_character_if_exists(self, character_id: str) -> bool:
+        """
+        指定されたキャラクターが存在する場合にロードする
+        
+        Args:
+            character_id: キャラクターID
+            
+        Returns:
+            bool: 成功した場合はTrue、失敗またはキャラクターが存在しない場合はFalse
+        """
+        # すでにロードされている場合は成功
+        if character_id in self.sprites:
+            self.logger.debug(f"キャラクター '{character_id}' はすでにロード済みです")
+            return True
+            
+        # キャラクターディレクトリを確認
+        character_dir = self.characters_dir / character_id
+        if not character_dir.exists() or not character_dir.is_dir():
+            self.logger.debug(f"キャラクターディレクトリが見つかりません: {character_dir}")
+            return False
+            
+        # PNGファイルが存在するか確認
+        png_files = list(character_dir.glob("*.png"))
+        if not png_files:
+            self.logger.debug(f"キャラクターディレクトリ '{character_id}' にPNG画像がありません")
+            return False
+            
+        # キャラクターをロード
+        self.logger.info(f"キャラクター '{character_id}' をロードします: {len(png_files)} 個の画像")
+        return self.load_character(character_id) 

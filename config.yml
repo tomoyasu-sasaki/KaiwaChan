@@ -18,6 +18,7 @@ models:
 paths:
   logs: logs
   models: models
+  assets: assets
 logging:
   level: 10  # DEBUG=10, INFO=20, WARNING=30, ERROR=40, CRITICAL=50
   format: '%(asctime)s [%(levelname)s] [%(name)s] %(message)s'
@@ -27,12 +28,17 @@ logging:
 character:
   default_id: "default"
   models_dir: "models/live2d"
+  assets_dir: "assets"  # アセットディレクトリのパス
+  images_dir: "assets/images"  # 画像ディレクトリのパス
+  characters_dir: "assets/images/characters"  # キャラクターディレクトリのパス
   expressions:
     - neutral
     - happy
     - sad
     - angry
     - surprised
+    - blink
+    - neutral_blink
   motions:
     - idle
     - talking

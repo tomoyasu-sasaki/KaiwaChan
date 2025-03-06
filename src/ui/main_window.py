@@ -177,6 +177,11 @@ class MainWindow(QMainWindow):
             # オーディオ処理スレッド
             self.audio_thread = None
             
+            # アニメーションタイマーの設定
+            self.animation_timer = QTimer(self)
+            self.animation_timer.timeout.connect(self._update_animation)
+            self.animation_timer.start(33)  # 約30FPS (1000ms / 30)
+            
             self.logger.info("コア機能の初期化が完了しました")
         except Exception as e:
             self.logger.error(f"コア機能の初期化に失敗: {str(e)}")
@@ -454,6 +459,10 @@ class MainWindow(QMainWindow):
     def cleanup(self):
         """リソースのクリーンアップ"""
         try:
+            # アニメーションタイマーの停止
+            if hasattr(self, 'animation_timer') and self.animation_timer:
+                self.animation_timer.stop()
+            
             # スレッドの停止
             if self.audio_thread and self.audio_thread.isRunning():
                 self.audio_thread.terminate()
@@ -483,3 +492,12 @@ class MainWindow(QMainWindow):
         self.audio_thread.finished.connect(self._handle_response)
         self.audio_thread.error.connect(self._handle_error)
         self.audio_thread.start()
+
+    def _update_animation(self):
+        """アニメーションの定期更新"""
+        if hasattr(self, 'character_animator') and self.character_animator:
+            try:
+                self.character_animator.update()
+            except Exception as e:
+                self.logger.error(f"アニメーション更新エラー: {e}")
+                # 一時的なエラーなら次のフレームで回復する可能性があるのでタイマーは停止しない
