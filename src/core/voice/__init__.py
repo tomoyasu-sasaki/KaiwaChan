@@ -5,6 +5,4 @@
 
 from .voice_clone_manager import VoiceCloneManager
 
-__all__ = [
-    'VoiceCloneManager',
-]
+__all__ = ['VoiceCloneManager']

@@ -15,8 +15,6 @@ from .error_handler import ErrorHandler
 # モデル管理
 from .model_downloader import ModelDownloader
 
-# 音声処理 (core.audioモジュールから参照)
-from ..core.audio import AudioProcessor
 
 # 便利な関数
 def get_version():
@@ -28,6 +26,5 @@ __all__ = [
     'FileManager',
     'ErrorHandler',
     'ModelDownloader',
-    'AudioProcessor',
     'get_version'
 ]

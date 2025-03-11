@@ -2,7 +2,7 @@ import os
 import sys
 from pathlib import Path
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
-                           QPushButton, QLabel, QComboBox, QMessageBox, QSizePolicy,
+                           QPushButton, QLabel, QMessageBox, QSizePolicy,
                            QMenuBar, QMenu, QStatusBar, QToolBar, QToolButton, QDialog, QFileDialog)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QIcon, QAction
@@ -18,7 +18,6 @@ from ..core.voice import VoiceCloneManager
 from ..core.animation import CharacterAnimator
 from ..config import get_settings
 from ..utils.logger import Logger
-from .voice_profile_dialog import VoiceProfileDialog
 from .components.message_display import MessageDisplay
 
 
@@ -205,22 +204,6 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(title_label)
         
         header_layout.addStretch()
-        
-        # プロファイル選択
-        profile_layout = QHBoxLayout()
-        profile_label = QLabel("音声プロファイル:")
-        self.profile_combo = QComboBox()
-        self.profile_combo.setMinimumWidth(150)
-        self.profile_combo.currentTextChanged.connect(self._on_profile_changed)
-        
-        profile_button = QPushButton("プロファイル管理")
-        profile_button.clicked.connect(self._show_profile_dialog)
-        
-        profile_layout.addWidget(profile_label)
-        profile_layout.addWidget(self.profile_combo)
-        profile_layout.addWidget(profile_button)
-        
-        header_layout.addLayout(profile_layout)
         main_layout.addLayout(header_layout)
         
         # テキスト表示エリア
@@ -245,9 +228,6 @@ class MainWindow(QMainWindow):
         
         # メインウィジェットを設定
         self.setCentralWidget(main_widget)
-        
-        # プロファイルリストの更新
-        self._update_profile_list()
         
     def setup_menu(self):
         """メニューバーの設定"""
@@ -276,14 +256,6 @@ class MainWindow(QMainWindow):
         clear_action.triggered.connect(self._clear_conversation)
         edit_menu.addAction(clear_action)
         
-        # 設定メニュー
-        settings_menu = menubar.addMenu("設定")
-        
-        # 音声プロファイル
-        profile_action = QAction("音声プロファイル管理", self)
-        profile_action.triggered.connect(self._show_profile_dialog)
-        settings_menu.addAction(profile_action)
-        
         # ヘルプメニュー
         help_menu = menubar.addMenu("ヘルプ")
         
@@ -300,32 +272,6 @@ class MainWindow(QMainWindow):
         # 状態表示
         self.status_label = QLabel("準備完了")
         self.status_bar.addPermanentWidget(self.status_label)
-        
-    def _show_profile_dialog(self):
-        """音声プロファイル管理ダイアログを表示"""
-        dialog = VoiceProfileDialog(self.voice_clone, self)
-        if dialog.exec():
-            self._update_profile_list()
-        
-    def _update_profile_list(self):
-        """プロファイルリストを更新"""
-        self.profile_combo.clear()
-        self.profile_combo.addItem("デフォルト")
-        
-        for profile_name in self.voice_clone.voice_profiles.keys():
-            self.profile_combo.addItem(profile_name)
-        
-    def _on_profile_changed(self, profile_name):
-        """プロファイル変更時の処理"""
-        if profile_name and profile_name != "デフォルト":
-            self.logger.info(f"音声プロファイル変更: {profile_name}")
-            # 属性の存在確認を追加
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"プロファイル: {profile_name}")
-        else:
-            # 属性の存在確認を追加
-            if hasattr(self, 'status_label'):
-                self.status_label.setText("プロファイル: デフォルト")
         
     def _handle_talk(self):
         """会話ボタンクリック時の処理"""
@@ -486,7 +432,7 @@ class MainWindow(QMainWindow):
             self.speech_recognizer,
             self.dialogue_engine,
             self.voice_clone,
-            self.profile_combo.currentText() if self.profile_combo.currentText() != "デフォルト" else None,
+            None,  # プロファイル機能を削除したのでNoneを指定
             self.character_animator
         )
         self.audio_thread.finished.connect(self._handle_response)
