@@ -3,14 +3,16 @@ import sys
 from pathlib import Path
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                            QPushButton, QLabel, QMessageBox, QSizePolicy,
-                           QMenuBar, QMenu, QStatusBar, QToolBar, QToolButton, QDialog, QFileDialog)
+                           QMenuBar, QMenu, QStatusBar, QToolBar, QToolButton, QDialog, QFileDialog, QGroupBox, QInputDialog)
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QIcon, QAction
 import tempfile
 import pygame
 import json
+import yaml
 import logging
 import glob
+import requests
 
 from ..core.stt import SpeechRecognizer
 from ..core.dialogue import DialogueEngine
@@ -32,7 +34,7 @@ class AudioProcessThread(QThread):
     4. 音声合成（TTS）または音声変換
     5. キャラクターアニメーション
     """
-    finished = pyqtSignal(str)
+    finished = pyqtSignal(str, str)  # (response_text, audio_path)
     error = pyqtSignal(str)
     
     def __init__(self, speech_recognizer, dialogue_engine, voice_clone, profile_name, character_animator=None):
@@ -58,24 +60,13 @@ class AudioProcessThread(QThread):
             response = self.dialogue_engine.generate_response(text)
             
             # 音声合成
-            if self.profile_name:
-                # プロファイルがある場合はボイスクローンで変換
-                audio_data = self.voice_clone.synthesize_speech(response, self.profile_name)
-                if audio_data is not None:
-                    # 音声データを一時ファイルに保存（_handle_responseで再生できるように）
-                    import soundfile as sf
-                    temp_file = "temp_audio.wav"
-                    sf.write(temp_file, audio_data, 22050)  # 正しいサンプリングレート（22050Hz）に修正
-                    print(f"音声ファイルを保存: {temp_file}")
-                else:
-                    # ボイスクローン失敗時は通常の音声合成にフォールバック
-                    audio_path = self.voice_clone.synthesize(response)
-            else:
-                # プロファイルがない場合は通常の音声合成を使用
-                audio_path = self.voice_clone.synthesize(response)
+            audio_path = self.voice_clone.synthesize(response)
             
-            # 応答テキストをUI側に渡す
-            self.finished.emit(response)
+            if not audio_path:
+                raise Exception("音声合成に失敗しました")
+            
+            # 応答テキストと音声ファイルのパスをUI側に渡す
+            self.finished.emit(response, audio_path)
             
         except Exception as e:
             import traceback
@@ -131,6 +122,234 @@ class AboutDialog(QDialog):
         layout.addWidget(tech_label)
         layout.addStretch()
         layout.addWidget(close_button)
+
+
+class VoiceModelsSettingsDialog(QDialog):
+    """音声モデル変更ダイアログ"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("音声モデル変更")
+        self.resize(600, 500)
+        self.logger = Logger(get_settings())
+        
+        # レイアウトの設定
+        layout = QVBoxLayout(self)
+        
+        # 現在の設定表示
+        current_settings = QGroupBox("現在の設定")
+        current_layout = QVBoxLayout()
+        self.current_info = QTextEdit()
+        self.current_info.setReadOnly(True)
+        self.current_info.setMaximumHeight(100)
+        current_layout.addWidget(self.current_info)
+        current_settings.setLayout(current_layout)
+        
+        # エンジン選択
+        engine_group = QGroupBox("音声合成エンジン")
+        engine_layout = QVBoxLayout()
+        
+        # ラジオボタンの作成
+        self.voicevox_radio = QPushButton("VOICEVOX")
+        self.voicevox_radio.setCheckable(True)
+        self.voicevox_radio.clicked.connect(lambda: self.switch_engine("voicevox"))
+        
+        self.parler_radio = QPushButton("Japanese Parler-TTS")
+        self.parler_radio.setCheckable(True)
+        self.parler_radio.clicked.connect(lambda: self.switch_engine("parler"))
+        
+        engine_layout.addWidget(self.voicevox_radio)
+        engine_layout.addWidget(self.parler_radio)
+        engine_group.setLayout(engine_layout)
+        
+        # VOICEVOX話者一覧
+        self.voicevox_group = QGroupBox("VOICEVOX話者一覧")
+        voicevox_layout = QVBoxLayout()
+        self.speakers_list = QTextEdit()
+        self.speakers_list.setReadOnly(True)
+        voicevox_layout.addWidget(self.speakers_list)
+        self.voicevox_group.setLayout(voicevox_layout)
+        
+        # Parler-TTS設定
+        self.parler_group = QGroupBox("Parler-TTS設定")
+        parler_layout = QVBoxLayout()
+        
+        # 話者の説明入力
+        description_label = QLabel("話者の説明:")
+        self.description_edit = QTextEdit()
+        self.description_edit.setPlaceholderText("例: A female speaker with a slightly high-pitched voice...")
+        self.description_edit.setMaximumHeight(100)
+        
+        parler_layout.addWidget(description_label)
+        parler_layout.addWidget(self.description_edit)
+        self.parler_group.setLayout(parler_layout)
+        
+        # ボタン
+        button_layout = QHBoxLayout()
+        self.select_button = QPushButton("設定を適用")
+        self.select_button.clicked.connect(self.apply_settings)
+        close_button = QPushButton("閉じる")
+        close_button.clicked.connect(self.accept)
+        button_layout.addWidget(self.select_button)
+        button_layout.addWidget(close_button)
+        
+        # レイアウトに追加
+        layout.addWidget(current_settings)
+        layout.addWidget(engine_group)
+        layout.addWidget(self.voicevox_group)
+        layout.addWidget(self.parler_group)
+        layout.addLayout(button_layout)
+        
+        # 初期状態の設定
+        self.load_current_settings()
+        self.load_voicevox_speakers()
+        
+    def load_current_settings(self):
+        """現在の設定を読み込んで表示"""
+        try:
+            with open("config.yml", "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+            
+            models_config = config.get("models", {})
+            voicevox_config = models_config.get("voicevox", {})
+            parler_config = models_config.get("parler", {})
+            
+            # 現在のエンジンを取得
+            current_engine = models_config.get("current_engine", "voicevox")
+            
+            # エンジンに応じた情報を表示
+            if current_engine == "voicevox":
+                current_info = (
+                    f"音声合成エンジン: VOICEVOX\n"
+                    f"話者ID: {voicevox_config.get('speaker_id', '未設定')}"
+                )
+                self.voicevox_radio.setChecked(True)
+                self.voicevox_group.show()
+                self.parler_group.hide()
+            else:
+                current_info = (
+                    f"音声合成エンジン: Japanese Parler-TTS\n"
+                    f"話者の説明: {parler_config.get('description', '未設定')}"
+                )
+                self.parler_radio.setChecked(True)
+                self.voicevox_group.hide()
+                self.parler_group.show()
+                
+                # 説明文を設定
+                self.description_edit.setText(parler_config.get("description", ""))
+            
+            self.current_info.setText(current_info)
+            
+        except Exception as e:
+            self.logger.error(f"設定の読み込みに失敗: {str(e)}")
+            self.current_info.setText("設定の読み込みに失敗しました。デフォルト設定を使用します。")
+            
+    def switch_engine(self, engine):
+        """エンジンの切り替え"""
+        if engine == "voicevox":
+            self.voicevox_group.show()
+            self.parler_group.hide()
+            self.voicevox_radio.setChecked(True)
+            self.parler_radio.setChecked(False)
+        else:
+            self.voicevox_group.hide()
+            self.parler_group.show()
+            self.voicevox_radio.setChecked(False)
+            self.parler_radio.setChecked(True)
+            
+    def apply_settings(self):
+        """設定を適用"""
+        try:
+            # 設定ファイルの読み込み
+            with open("config.yml", "r", encoding="utf-8") as f:
+                config = yaml.safe_load(f)
+            
+            if "models" not in config:
+                config["models"] = {}
+            
+            # 現在選択されているエンジンを確認
+            current_engine = "voicevox" if self.voicevox_radio.isChecked() else "parler"
+            config["models"]["current_engine"] = current_engine
+            
+            if current_engine == "voicevox":
+                # VOICEVOXの設定
+                speaker_id, ok = QInputDialog.getInt(
+                    self,
+                    "話者ID選択",
+                    "話者IDを入力してください（上記一覧から選択）:",
+                    value=1,
+                    min=1,
+                    max=999
+                )
+                
+                if ok:
+                    if "voicevox" not in config["models"]:
+                        config["models"]["voicevox"] = {}
+                    config["models"]["voicevox"]["speaker_id"] = speaker_id
+                else:
+                    return
+            else:
+                # Parler-TTSの設定
+                description = self.description_edit.toPlainText().strip()
+                if not description:
+                    QMessageBox.warning(
+                        self,
+                        "入力エラー",
+                        "話者の説明を入力してください。"
+                    )
+                    return
+                
+                if "parler" not in config["models"]:
+                    config["models"]["parler"] = {}
+                config["models"]["parler"]["description"] = description
+            
+            # 設定を保存
+            with open("config.yml", "w", encoding="utf-8") as f:
+                yaml.safe_dump(config, f, default_flow_style=False, allow_unicode=True)
+            
+            # 表示を更新
+            self.load_current_settings()
+            
+            # 成功メッセージ
+            QMessageBox.information(
+                self,
+                "設定完了",
+                "音声設定を更新しました。\n変更を適用するにはアプリケーションの再起動が必要です。"
+            )
+            
+        except Exception as e:
+            self.logger.error(f"設定の保存に失敗: {str(e)}")
+            QMessageBox.critical(
+                self,
+                "エラー",
+                f"設定の保存に失敗しました: {str(e)}"
+            )
+            
+    def load_voicevox_speakers(self):
+        """VOICEVOXの話者一覧を取得して表示"""
+        try:
+            # VOICEVOXのAPIエンドポイント
+            response = requests.get("http://localhost:50021/speakers")
+            if response.status_code == 200:
+                speakers = response.json()
+                
+                # 話者情報を整形
+                speakers_info = []
+                for speaker in speakers:
+                    styles = speaker.get('styles', [])
+                    for style in styles:
+                        speakers_info.append(f"■ {speaker.get('name', '不明')} - {style.get('name', '不明')} (ID: {style.get('id', '不明')})")
+                
+                if speakers_info:
+                    self.speakers_list.setText("\n".join(speakers_info))
+                else:
+                    self.speakers_list.setText("利用可能な話者が見つかりませんでした")
+            else:
+                self.speakers_list.setText(f"VOICEVOXサーバーからの応答エラー: {response.status_code}")
+                
+        except requests.exceptions.ConnectionError:
+            self.speakers_list.setText("VOICEVOXサーバーに接続できません。\nVOICEVOXが起動しているか確認してください。")
+        except Exception as e:
+            self.speakers_list.setText(f"話者一覧の取得に失敗しました: {str(e)}")
 
 
 class MainWindow(QMainWindow):
@@ -255,6 +474,9 @@ class MainWindow(QMainWindow):
         clear_action = QAction("会話履歴クリア", self)
         clear_action.triggered.connect(self._clear_conversation)
         edit_menu.addAction(clear_action)
+        voice_models_settings = QAction("音声モデル変更", self)
+        voice_models_settings.triggered.connect(self._voice_models_settings)
+        edit_menu.addAction(voice_models_settings)
         
         # ヘルプメニュー
         help_menu = menubar.addMenu("ヘルプ")
@@ -286,7 +508,7 @@ class MainWindow(QMainWindow):
         # スレッドの初期化と開始
         self.initialize_thread()
         
-    def _handle_response(self, response):
+    def _handle_response(self, response, audio_path):
         """対話応答の処理とテキスト音声合成"""
         # UIの状態を元に戻す
         self.talk_button.setEnabled(True)
@@ -298,17 +520,26 @@ class MainWindow(QMainWindow):
         self.logger.info(f"対話生成: {response}")
         
         try:
+            # キャラクターの口パクアニメーションを開始
+            if hasattr(self, 'character_animator') and self.character_animator:
+                self.character_animator.start_talking()
+            
             # 音声ファイル再生
-            self._play_latest_audio()
+            pygame.mixer.init()
+            pygame.mixer.music.load(audio_path)
+            pygame.mixer.music.play()
+            
+            # 音声の長さを取得して、その時間後に口パクを停止
+            import soundfile as sf
+            audio_data, samplerate = sf.read(audio_path)
+            duration = len(audio_data) / samplerate * 1000  # ミリ秒に変換
             
             # 音声再生が完了したらタイマーでキャラクターの口パクアニメーションを停止
             def stop_animation():
-                # 口パクアニメーションの停止
                 if hasattr(self, 'character_animator') and self.character_animator:
                     self.character_animator.stop_talking()
             
-            # 音声の長さに基づいて口パクを止めるタイマーを設定（仮に5秒）
-            QTimer.singleShot(5000, stop_animation)
+            QTimer.singleShot(int(duration), stop_animation)
             
         except Exception as e:
             self.logger.error(f"音声再生エラー: {str(e)}")
@@ -317,47 +548,6 @@ class MainWindow(QMainWindow):
             # エラー時も口パクアニメーションを停止
             if hasattr(self, 'character_animator') and self.character_animator:
                 self.character_animator.stop_talking()
-    
-    def _play_latest_audio(self):
-        """最新の音声ファイルを再生"""
-        # 一般的なパターンとしてtemp_audio.wavかtemp_audio_tts.wavが使われる
-        audio_paths = [
-            Path("temp_audio.wav"), 
-            Path("temp_audio_tts.wav"),
-            # キャッシュディレクトリから最新のファイルを探す
-            Path(tempfile.gettempdir()) / "kaiwachan" / "tts_cache" / "*.wav"
-        ]
-        audio_path = None
-        
-        # スレッドで生成された音声ファイルを優先して探す
-        for path in audio_paths:
-            if path.is_file():
-                audio_path = str(path)
-                break
-            elif '*' in str(path):  # グロブパターンの場合
-                files = sorted(glob.glob(str(path)), key=os.path.getctime, reverse=True)
-                if files:
-                    audio_path = files[0]
-                    break
-        
-        if not audio_path:
-            self.logger.warning("再生する音声ファイルが見つかりません")
-            return
-        
-        self.logger.info(f"音声再生: {audio_path}")
-        
-        # キャラクターの口パクアニメーションを開始
-        if hasattr(self, 'character_animator') and self.character_animator:
-            self.character_animator.start_talking()
-            
-        # 音声再生
-        if hasattr(self, 'audio_player'):
-            self.audio_player.play_file(audio_path, blocking=False)
-        else:
-            # 既存のコードでの再生方法
-            pygame.mixer.init()
-            pygame.mixer.music.load(audio_path)
-            pygame.mixer.music.play()
     
     def _handle_error(self, error_msg):
         """エラー処理"""
@@ -375,6 +565,11 @@ class MainWindow(QMainWindow):
     def _clear_conversation(self):
         """会話履歴をクリア"""
         self.text_display.clear_messages()
+        
+    def _voice_models_settings(self):
+        """音声モデル変更ダイアログを表示"""
+        dialog = VoiceModelsSettingsDialog(self)
+        dialog.exec()
         
     def _export_conversation(self):
         """会話履歴をファイルにエクスポート"""
@@ -435,7 +630,7 @@ class MainWindow(QMainWindow):
             None,  # プロファイル機能を削除したのでNoneを指定
             self.character_animator
         )
-        self.audio_thread.finished.connect(self._handle_response)
+        self.audio_thread.finished.connect(lambda response, audio_path: self._handle_response(response, audio_path))
         self.audio_thread.error.connect(self._handle_error)
         self.audio_thread.start()
 

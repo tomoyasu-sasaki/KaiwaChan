@@ -10,13 +10,16 @@ import os
 from typing import Optional, Dict, Union
 import sounddevice as sd
 import uuid
+import torch
+from parler_tts import ParlerTTSForConditionalGeneration
+from transformers import AutoTokenizer
+from rubyinserter import add_ruby
 
 class TTSEngine:
     """
     テキスト音声合成（TTS）を管理するクラス
     
-    テキストから音声データを生成する機能を提供します。
-    VOICEVOXをバックエンドとして使用し、テキストから自然な音声を生成します。
+    VOICEVOXとJapanese Parler-TTSをサポートし、設定に応じて切り替えることができます。
     """
     
     def __init__(self, config=None):
@@ -27,41 +30,72 @@ class TTSEngine:
             config: 設定オブジェクト
         """
         self.logger = logging.getLogger(__name__)
-        self.config = config
         
         # デフォルト設定
         self.base_url = "http://localhost:50021"
-        self.speaker_id = 2
+        self.speaker_id = 1
         self.max_retries = 3
         self.retry_delay = 1.0
         self.timeout = 30
-        self.sample_rate = 24000  # VOICEVOXのデフォルトサンプルレート
+        self.sample_rate = 24000
         self.cache_size = 100
         self.cache_enabled = True
+        self.current_engine = "parler"
+        self.description = "A female speaker with a slightly high-pitched voice delivers her words at a moderate speed with a quite monotone tone in a confined environment, resulting in a quite clear audio recording"
         
         # 設定から値を取得
-        if config:
-            voicevox_config = config.get("models", "voicevox", {})
-            self.base_url = voicevox_config.get("url", self.base_url)
-            self.speaker_id = config.get("character", "voice_id", self.speaker_id)
-            self.max_retries = voicevox_config.get("max_retries", self.max_retries)
-            self.retry_delay = voicevox_config.get("retry_delay", self.retry_delay)
-            self.timeout = voicevox_config.get("timeout", self.timeout)
-            self.cache_size = voicevox_config.get("cache_size", self.cache_size)
-            self.cache_enabled = voicevox_config.get("cache_enabled", self.cache_enabled)
+        if config is not None:
+            try:
+                models_config = config.get("models", {})
+                self.current_engine = str(models_config.get("current_engine", self.current_engine))
+                
+                # VOICEVOX設定
+                voicevox_config = models_config.get("voicevox", {})
+                self.base_url = str(voicevox_config.get("url", self.base_url))
+                self.speaker_id = int(voicevox_config.get("speaker_id", self.speaker_id))
+                self.max_retries = int(voicevox_config.get("max_retries", self.max_retries))
+                self.retry_delay = float(voicevox_config.get("retry_delay", self.retry_delay))
+                self.timeout = int(voicevox_config.get("timeout", self.timeout))
+                self.cache_size = int(voicevox_config.get("cache_size", self.cache_size))
+                self.cache_enabled = bool(voicevox_config.get("cache_enabled", self.cache_enabled))
+                
+                # Parler-TTS設定
+                parler_config = models_config.get("parler", {})
+                self.description = str(parler_config.get("description", "A female speaker with a slightly high-pitched voice..."))
+            except Exception as e:
+                self.logger.error(f"設定の読み込み中にエラーが発生しました: {str(e)}")
+                # デフォルト値を使用して続行
         
         # キャッシュの初期化
         self.cache_dir = Path(tempfile.gettempdir()) / "kaiwachan" / "tts_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache = {}
         
+        # Parler-TTSの初期化（必要な場合）
+        if self.current_engine == "parler":
+            self.initialize_parler_tts()
+            
+    def initialize_parler_tts(self):
+        """Parler-TTSモデルとトークナイザーの初期化"""
+        try:
+            self.logger.info("Parler-TTSモデルを初期化中...")
+            self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+            self.model = ParlerTTSForConditionalGeneration.from_pretrained(
+                "2121-8/japanese-parler-tts-mini-bate"
+            ).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained("2121-8/japanese-parler-tts-mini-bate")
+            self.logger.info("✅ Parler-TTSモデルの初期化完了")
+        except Exception as e:
+            self.logger.error(f"❌ Parler-TTSモデルの初期化に失敗: {str(e)}")
+            raise
+            
     def synthesize(self, text: str, speaker_id: Optional[int] = None) -> Optional[str]:
         """
         テキストから音声を合成する
         
         Args:
             text: 合成するテキスト
-            speaker_id: 話者ID（指定しない場合はデフォルト値を使用）
+            speaker_id: VOICEVOXの話者ID（指定しない場合はデフォルト値を使用）
             
         Returns:
             str: 生成された音声ファイルのパス、失敗時はNone
@@ -70,42 +104,84 @@ class TTSEngine:
             self.logger.warning("空のテキストが渡されました。音声合成をスキップします")
             return None
             
-        # 話者IDの設定
+        # エンジンに応じて合成処理を分岐
+        if self.current_engine == "parler":
+            return self.synthesize_with_parler(text)
+        else:
+            return self.synthesize_with_voicevox(text, speaker_id)
+            
+    def synthesize_with_parler(self, text: str) -> Optional[str]:
+        """Parler-TTSを使用して音声を合成"""
+        try:
+            self.logger.info(f"🔊 Parler-TTSで音声合成を開始: {text[:30]}{'...' if len(text) > 30 else ''}")
+            
+            # キャッシュチェック
+            if self.cache_enabled:
+                cache_key = f"parler_{text}_{self.description}"
+                if cache_key in self.cache and os.path.exists(self.cache[cache_key]):
+                    self.logger.info("✅ キャッシュから音声を取得しました")
+                    return self.cache[cache_key]
+            
+            # テキストにルビを追加
+            text = add_ruby(text)
+            
+            # 入力の準備
+            input_ids = self.tokenizer(self.description, return_tensors="pt").input_ids.to(self.device)
+            prompt_input_ids = self.tokenizer(text, return_tensors="pt").input_ids.to(self.device)
+            
+            # 音声生成
+            generation = self.model.generate(input_ids=input_ids, prompt_input_ids=prompt_input_ids)
+            audio_arr = generation.cpu().numpy().squeeze()
+            
+            # 一意のファイル名を生成
+            file_name = f"tts_parler_{uuid.uuid4().hex}.wav"
+            audio_path = self.cache_dir / file_name
+            
+            # 音声データをファイルに保存
+            sf.write(str(audio_path), audio_arr, self.model.config.sampling_rate)
+            
+            # キャッシュに追加
+            if self.cache_enabled:
+                if len(self.cache) >= self.cache_size:
+                    oldest_key = next(iter(self.cache))
+                    oldest_file = self.cache.pop(oldest_key)
+                    if os.path.exists(oldest_file):
+                        try:
+                            os.remove(oldest_file)
+                        except Exception as e:
+                            self.logger.warning(f"古いキャッシュファイルの削除に失敗: {e}")
+                
+                self.cache[cache_key] = str(audio_path)
+            
+            self.logger.info(f"✅ Parler-TTS音声合成完了: {audio_path}")
+            return str(audio_path)
+            
+        except Exception as e:
+            self.logger.error(f"❌ Parler-TTS音声合成エラー: {str(e)}")
+            return None
+            
+    def synthesize_with_voicevox(self, text: str, speaker_id: Optional[int] = None) -> Optional[str]:
+        """VOICEVOXを使用して音声を合成"""
         current_speaker = speaker_id if speaker_id is not None else self.speaker_id
         
         # キャッシュチェック
         if self.cache_enabled:
-            cache_key = f"{text}_{current_speaker}"
+            cache_key = f"voicevox_{text}_{current_speaker}"
             if cache_key in self.cache and os.path.exists(self.cache[cache_key]):
                 self.logger.info("✅ キャッシュから音声を取得しました")
                 return self.cache[cache_key]
         
-        self.logger.info(f"🔊 音声合成を開始: {text[:30]}{'...' if len(text) > 30 else ''}")
+        self.logger.info(f"🔊 VOICEVOX音声合成を開始: {text[:30]}{'...' if len(text) > 30 else ''}")
         
         for attempt in range(self.max_retries):
             try:
                 # 音声合成クエリを作成
-                self.logger.debug(f"音声合成クエリを作成中... (試行 {attempt + 1}/{self.max_retries})")
                 params = {'text': text, 'speaker': current_speaker}
-                
-                query = requests.post(
-                    f'{self.base_url}/audio_query',
-                    params=params,
-                    timeout=self.timeout
-                )
+                query = requests.post(f'{self.base_url}/audio_query', params=params, timeout=self.timeout)
                 query.raise_for_status()
                 query_data = query.json()
                 
-                # カスタムパラメータを設定（例：話速、音高など）
-                if self.config:
-                    voice_params = self.config.get("character", "voice_params", {})
-                    if voice_params:
-                        for param, value in voice_params.items():
-                            if param in query_data:
-                                query_data[param] = value
-                
                 # 音声を生成
-                self.logger.debug("音声を生成中...")
                 synthesis = requests.post(
                     f'{self.base_url}/synthesis',
                     headers={'Content-Type': 'application/json'},
@@ -116,7 +192,7 @@ class TTSEngine:
                 synthesis.raise_for_status()
                 
                 # 一意のファイル名を生成
-                file_name = f"tts_{uuid.uuid4().hex}.wav"
+                file_name = f"tts_voicevox_{uuid.uuid4().hex}.wav"
                 audio_path = self.cache_dir / file_name
                 
                 # 音声データをファイルに保存
@@ -126,7 +202,6 @@ class TTSEngine:
                 # キャッシュに追加
                 if self.cache_enabled:
                     if len(self.cache) >= self.cache_size:
-                        # 最も古いキャッシュエントリを削除
                         oldest_key = next(iter(self.cache))
                         oldest_file = self.cache.pop(oldest_key)
                         if os.path.exists(oldest_file):
@@ -137,17 +212,17 @@ class TTSEngine:
                     
                     self.cache[cache_key] = str(audio_path)
                 
-                self.logger.info(f"✅ 音声合成完了: {audio_path}")
+                self.logger.info(f"✅ VOICEVOX音声合成完了: {audio_path}")
                 return str(audio_path)
                 
             except requests.exceptions.RequestException as e:
                 self.logger.warning(f"⚠️ 試行 {attempt + 1}/{self.max_retries} 失敗: {str(e)}")
                 if attempt == self.max_retries - 1:
-                    self.logger.error(f"❌ 音声合成に失敗しました: {str(e)}")
+                    self.logger.error(f"❌ VOICEVOX音声合成に失敗しました: {str(e)}")
                     return None
                 time.sleep(self.retry_delay)
             except Exception as e:
-                self.logger.error(f"❌ 音声合成中に予期しないエラーが発生: {str(e)}")
+                self.logger.error(f"❌ VOICEVOX音声合成中に予期しないエラーが発生: {str(e)}")
                 return None
     
     def synthesize_to_array(self, text: str, speaker_id: Optional[int] = None) -> Optional[np.ndarray]:
