@@ -71,7 +71,7 @@ class SettingsManager:
         return {
             "models": {
                 "whisper": "base",
-                "llama": {
+                "llm": {
                     "path": str(self.root_dir / "models" / "granite-3.1-8b-instruct-Q4_K_M.gguf"),
                     "n_threads": 8,
                     "n_batch": 512,
@@ -402,42 +402,22 @@ class SettingsManager:
     
     def get_model_path(self, model_name: str) -> Path:
         """
-        モデルファイルパスを取得する - 古いConfigクラスの互換性メソッド
+        モデルファイルのパスを取得する
         
         Args:
-            model_name: モデル名（"llama", "whisper"など）
+            model_name: モデル名（"llm", "whisper"など）
             
         Returns:
-            モデルファイルのパス
+            Path: モデルファイルのパス
         """
-        # root_dirが設定されている場合はそれを使用、そうでなければ/Users/tmys-sasaki/Projects/Private/KaiwaChanを使用
-        base_dir = getattr(self, 'root_dir', Path('/Users/tmys-sasaki/Projects/Private/KaiwaChan'))
-        models_dir = base_dir / self.get_app_config("paths", "models", "models")
+        models_dir = Path(self.get_app_config("paths", "models"))
         
-        if isinstance(models_dir, str):
-            models_dir = Path(models_dir)
-            
-        if model_name == "llama":
-            # モデル設定から情報を取得
+        # モデル名に応じてパスを返す
+        if model_name == "llm":
             model_config = self.get_app_config("models", "llm", {})
-            
-            # 設定からファイル名を取得（デフォルトはQ4_K_Mバージョン）
-            model_file = model_config.get("file", "granite-3.1-8b-instruct-Q4_K_M.gguf")
-            
-            # ファイルの存在確認
-            model_path = models_dir / model_file
-            
-            # 指定されたファイルが見つからない場合、モデルディレクトリ内のggufファイルを探す
-            if not model_path.exists():
-                self.logger.warning(f"指定されたモデルファイルが見つかりません: {model_path}")
-                
-                # models以下のggufファイルを検索
-                gguf_files = list(models_dir.glob("*.gguf"))
-                if gguf_files:
-                    model_path = gguf_files[0]  # 最初に見つかったGGUFファイルを使用
-                    self.logger.info(f"代替モデルファイルを使用します: {model_path}")
-                
-            return model_path
+            model_path = model_config.get("path")
+            if model_path:
+                return Path(model_path)
             
         elif model_name == "whisper":
             model_file = self.get_app_config("models", "whisper", {}).get("file", "whisper-small.en")

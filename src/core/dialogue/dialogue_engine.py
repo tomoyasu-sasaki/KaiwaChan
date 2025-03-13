@@ -4,6 +4,9 @@ import logging
 import time
 import json
 from typing import List, Dict, Optional, Any
+from src.config.settings_manager import SettingsManager
+import os
+import warnings
 
 class DialogueEngine:
     """
@@ -13,22 +16,46 @@ class DialogueEngine:
     LLMを使用して自然な会話応答を生成します。
     """
     
-    def __init__(self, config=None):
+    def __init__(self, settings_manager: SettingsManager):
         """
-        コンストラクタ
+        初期化
         
         Args:
-            config: 設定オブジェクト
+            settings_manager: 設定マネージャー
         """
+        self.settings_manager = settings_manager
         self.logger = logging.getLogger(__name__)
-        self.config = config
+        
+        # 警告の抑制
+        self._suppress_warnings()
+        
         self.model = None
         self.conversation_history = []
         self.max_history = 10
         
+        # モデルのパスを取得
+        model_path = self.settings_manager.get_model_path("llm")
+        if not model_path.exists():
+            raise FileNotFoundError(f"モデルファイルが見つかりません: {model_path}")
+
+        # モデルの設定を取得
+        model_config = self.settings_manager.get_app_config("models", "llm", {})
+        self.n_threads = model_config.get("n_threads", 8)
+        self.n_batch = model_config.get("n_batch", 512)
+        self.max_tokens = model_config.get("max_tokens", 128)
+        
         # モデルの初期化
-        if config:
-            self._initialize_model()
+        self._initialize_model()
+    
+    def _suppress_warnings(self):
+        """警告とログの抑制"""
+        # LLaMAの警告を抑制
+        logging.getLogger("llama_cpp").setLevel(logging.ERROR)
+        warnings.filterwarnings("ignore", category=UserWarning)
+        
+        # Metal関連の警告を抑制（bf16関連）
+        os.environ["METAL_DEBUG_ERROR_MODE"] = "0"
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
     
     def _initialize_model(self) -> bool:
         """
@@ -38,32 +65,20 @@ class DialogueEngine:
             bool: 初期化に成功したかどうか
         """
         try:
-            model_path = self.config.get_model_path("llama")
-            if not model_path.exists():
-                self.logger.error(f"モデルファイルが見つかりません: {model_path}")
-                raise FileNotFoundError(
-                    f"Graniteモデルが見つかりません: {model_path}\n"
-                    "1. https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF からモデルをダウンロード\n"
-                    f"2. {model_path}に配置してください"
-                )
-            
+            # モデルのパスを取得
+            model_path = self.settings_manager.get_model_path("llm")
             self.logger.info(f"LLMモデルをロード中: {model_path}")
             start_time = time.time()
-            
-            # モデル設定を取得
-            model_config = self.config.get_app_config("models", "llm", {})
-            n_threads = model_config.get("n_threads", 8)
-            n_batch = model_config.get("n_batch", 512)
-            n_ctx = model_config.get("n_ctx", 2048)
             
             # モデルをロード
             self.model = Llama(
                 model_path=str(model_path),
-                n_ctx=n_ctx,
+                n_ctx=2048,
                 n_gpu_layers=-1,  # 利用可能なすべてのGPUレイヤーを使用
-                n_threads=n_threads,
-                n_batch=n_batch,
-                seed=42
+                n_threads=self.n_threads,
+                n_batch=self.n_batch,
+                seed=42,
+                verbose=False  # ログ出力を抑制
             )
             
             load_time = time.time() - start_time
@@ -86,6 +101,7 @@ class DialogueEngine:
             生成された応答テキスト
         """
         try:
+            
             self.logger.info(f"👤 ユーザー入力: {user_input}")
             
             # モデルが初期化されていない場合は初期化を試みる
@@ -93,21 +109,24 @@ class DialogueEngine:
                 if not self._initialize_model():
                     return "申し訳ありません。対話エンジンの初期化に失敗しました。"
             
-            # プロンプトの生成
-            system_prompt = self._generate_system_prompt(character_info)
+            # 会話履歴が空の場合のみシステムプロンプトを生成
+            messages = []
+            if not self.conversation_history:
+                system_prompt = self._generate_system_prompt(character_info)
+                messages.append({"role": "system", "content": system_prompt})
+                self.conversation_history.append({"role": "system", "content": system_prompt})
+            else:
+                # システムプロンプトを履歴から取得
+                system_message = next((m for m in self.conversation_history if m["role"] == "system"), None)
+                if system_message:
+                    messages.append(system_message)
             
             self.logger.info("🤖 応答を生成中...")
             
-            # モデル設定を取得
-            llm_config = self.config.get_app_config("models", "llm", {})
-            max_tokens = llm_config.get("max_tokens", 128)
-            
-            # 会話履歴の準備
-            messages = [{"role": "system", "content": system_prompt}]
-            
-            # 過去の会話を追加
+            # 過去の会話を追加（システムプロンプト以外）
             for h in self.conversation_history:
-                messages.append({"role": h["role"], "content": h["content"]})
+                if h["role"] != "system":
+                    messages.append(h)
             
             # 新しいユーザー入力を追加
             messages.append({"role": "user", "content": user_input})
@@ -116,7 +135,7 @@ class DialogueEngine:
             # 応答の生成
             response = self.model.create_chat_completion(
                 messages,
-                max_tokens=max_tokens,
+                max_tokens=self.max_tokens,
                 temperature=0.7,
                 top_p=0.9,
                 repeat_penalty=1.1,
@@ -129,10 +148,10 @@ class DialogueEngine:
             # 会話履歴に追加
             self.conversation_history.append({"role": "assistant", "content": assistant_response})
             
-            # 会話履歴が長すぎる場合は古いものを削除
-            if len(self.conversation_history) > self.max_history * 2:
-                # システムプロンプト以外の古い会話を削除
-                self.conversation_history = self.conversation_history[-self.max_history * 2:]
+            # 会話履歴が長すぎる場合は古いものを削除（システムプロンプトは保持）
+            if len(self.conversation_history) > self.max_history * 2 + 1:  # +1 はシステムプロンプト用
+                system_message = next(m for m in self.conversation_history if m["role"] == "system")
+                self.conversation_history = [system_message] + self.conversation_history[-(self.max_history * 2):]
             
             return assistant_response
             
@@ -145,25 +164,35 @@ class DialogueEngine:
         システムプロンプトを生成する
         
         Args:
-            character_info: キャラクター情報
+            character_info: キャラクター情報（オプション）
             
         Returns:
             str: 生成されたシステムプロンプト
         """
-        # キャラクター設定
-        character_name = "AI"
-        character_personality = "親しみやすく丁寧"
-        character_speaking_style = "簡潔で自然な日本語"
+        # キャラクター設定をconfig.ymlから取得
+        default_character = self.settings_manager.get_app_config("behavior", "character", {})
         
+        # デフォルト値の設定（設定ファイルの値を優先）
+        character_name = default_character.get("name", "会話ちゃん")
+        character_personality = default_character.get("personality", "お嬢様")
+        character_speaking_style = default_character.get("speaking_style", "丁寧で優雅な日本語")
+        
+        # character_infoで上書き
         if character_info:
             character_name = character_info.get("name", character_name)
             character_personality = character_info.get("personality", character_personality)
             character_speaking_style = character_info.get("speaking_style", character_speaking_style)
         
-        # システムプロンプト
+        # プロンプトの生成
         system_prompt = f"""あなたは{character_name}という名前の{character_personality}なAIアシスタントです。
 {character_speaking_style}で応答してください。
-質問に対して簡潔に回答し、必要以上の説明は避けてください。"""
+簡潔に回答し、対話が継続するように意識してください。必要以上の説明は避けてください。
+
+以下の制約に従ってください：
+1. 常に日本語で応答すること
+2. 一度の応答は3文以内に収めること
+3. 相手の発言に共感を示しながら会話を進めること
+4. 質問されていない場合でも、会話を継続させるための質問を1つ含めること"""
         
         return system_prompt
     
@@ -208,15 +237,13 @@ class DialogueEngine:
             assistant_response: アシスタントの応答
         """
         # 新しい対話ターンを追加
-        self.conversation_history.append({
-            "user": user_input,
-            "assistant": assistant_response,
-            "timestamp": time.time()
-        })
+        self.conversation_history.append({"role": "user", "content": user_input})
+        self.conversation_history.append({"role": "assistant", "content": assistant_response})
         
-        # 履歴の長さを制限
-        if len(self.conversation_history) > self.max_history:
-            self.conversation_history = self.conversation_history[-self.max_history:]
+        # 履歴の長さを制限（システムプロンプトは保持）
+        if len(self.conversation_history) > self.max_history * 2 + 1:
+            system_message = next(m for m in self.conversation_history if m["role"] == "system")
+            self.conversation_history = [system_message] + self.conversation_history[-(self.max_history * 2):]
     
     def clear_history(self) -> None:
         """会話履歴をクリアする"""

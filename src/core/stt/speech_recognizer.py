@@ -4,6 +4,8 @@ import sounddevice as sd
 import logging
 import time
 from typing import Tuple, Optional, Dict, Union
+import warnings
+import torch
 
 class SpeechRecognizer:
     """
@@ -23,6 +25,9 @@ class SpeechRecognizer:
         self.logger = logging.getLogger(__name__)
         self.config = config
         
+        # 警告の抑制
+        self._suppress_warnings()
+        
         # デフォルト設定
         self.model_size = "base"
         self.sample_rate = 16000
@@ -40,6 +45,17 @@ class SpeechRecognizer:
         
         # モデルの遅延ロード
         self._model = None
+        
+    def _suppress_warnings(self):
+        """警告とログの抑制"""
+        # Whisperの警告を抑制
+        logging.getLogger("whisper").setLevel(logging.ERROR)
+        warnings.filterwarnings("ignore", category=UserWarning)
+        warnings.filterwarnings("ignore", category=FutureWarning)
+        
+        # PyTorchの警告を抑制
+        logging.getLogger("torch").setLevel(logging.ERROR)
+        torch.set_warn_always(False)
         
     def load_model(self) -> bool:
         """

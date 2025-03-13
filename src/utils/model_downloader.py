@@ -19,54 +19,17 @@ class ModelDownloader:
     
     # サポートするモデルの定義
     MODELS = {
-        "llama": {
-            "name": "Granite 3.1 8B Instruct",
-            "files": [
-                {
-                    "url": "https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF/resolve/main/granite-3.1-8b-instruct-Q4_K_M.gguf",
-                    "filename": "granite-3.1-8b-instruct-Q4_K_M.gguf",
-                    "size": 4903691116,  # 約4.9GB
-                    "md5": None,  # 不明な場合はNone
-                    "description": "Granite 3.1 8BモデルのQ4_K_M量子化版"
-                },
-                {
-                    "url": "https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF/resolve/main/granite-3.1-8b-instruct-Q5_K_M.gguf",
-                    "filename": "granite-3.1-8b-instruct-Q5_K_M.gguf",
-                    "size": 5910713612,  # 約5.9GB
-                    "md5": None,
-                    "description": "Granite 3.1 8BモデルのQ5_K_M量子化版（より高品質）"
-                }
-            ],
-            "required": True,
-            "description": "メインの対話生成モデル"
-        },
         "whisper": {
-            "name": "Whisper (medium)",
-            "files": [
-                {
-                    "url": None,  # PyTorchが自動的にダウンロードする
-                    "filename": "medium.pt",
-                    "size": 1500000000,  # 約1.5GB
-                    "md5": None,
-                    "description": "OpenAI Whisper中サイズモデル"
-                }
-            ],
-            "required": True,
-            "description": "音声認識モデル"
+            "base": {
+                "url": "https://openaipublic.azureedge.net/main/whisper/models/ed3a0b6b1c0edf879ad9b11b1af5a0e6ab5db9205f891f668f8b0e6c6326e34e/base.pt",
+                "size": 147_000_000
+            }
         },
-        "tts": {
-            "name": "TTS Kokoro Model",
-            "files": [
-                {
-                    "url": None,  # ライブラリが自動的にダウンロードする
-                    "filename": "tts_models/ja/kokoro/tacotron2-DDC",
-                    "size": 300000000,  # 約300MB
-                    "md5": None,
-                    "description": "日本語音声合成モデル"
-                }
-            ],
-            "required": False,
-            "description": "テキスト音声合成モデル（VOICEVOXの代替）"
+        "llm": {
+            "granite-3.1-8b-instruct-Q4_K_M": {
+                "url": "https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF/resolve/main/granite-3.1-8b-instruct-Q4_K_M.gguf",
+                "size": 4_800_000_000
+            }
         }
     }
     
