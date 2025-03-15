@@ -7,8 +7,7 @@ KaiwaChan（会話ちゃん）は、ローカル環境で動作する音声対�
 ## 特徴
 - 音声認識による対話入力（無音検出による自動録音終了機能搭載）
 - ローカル環境で動作するLLMによる応答生成
-- 音声合成（VOICEVOXエンジン連携）
-- ボイスクローン機能（自分の声や特定の声でキャラクターに話させることが可能）
+- 音声合成（VOICEVOX、Parler-TTS対応）
 - 2Dキャラクターアニメーション表示
 - プロファイル管理機能
 - 詳細なログ出力とデバッグ機能
@@ -16,11 +15,11 @@ KaiwaChan（会話ちゃん）は、ローカル環境で動作する音声対�
 ## 使用技術
 - **Python 3.9+**: 基本言語
 - **PyQt6**: GUIフレームワーク
-- **Llama.cpp**: ローカルLLM推論エンジン
+- **llama-cpp-python**: ローカルLLM推論エンジン
 - **Granite-3.1-8b-instruct**: 会話生成AI言語モデル
 - **Whisper**: 音声認識（Speech-to-Text）
 - **VOICEVOX**: 音声合成（Text-to-Speech）
-- **TTS (Coqui TTS)**: ボイスクローン機能
+- **Parler-TTS**: 音声合成（Text-to-Speech）
 - **PyGame**: キャラクターアニメーション
 - **NumPy/SciPy**: 信号処理
 - **PyAudio/SoundDevice**: オーディオ入出力
@@ -28,7 +27,7 @@ KaiwaChan（会話ちゃん）は、ローカル環境で動作する音声対�
 
 ## システム要件
 - Python 3.9以上
-- CUDA対応GPUを推奨（CPU動作も可能）
+- MPS対応GPUを推奨（CPU動作も可能）
 - 最低8GB以上のRAM（16GB以上推奨）
 - VOICEVOXエンジン（音声合成に使用）
 - 約15GB以上の空き容量（モデルファイル含む）
@@ -83,31 +82,23 @@ KaiwaChan/
 │   │   │   └── dialogue_engine.py # LLMを使用した対話生成
 │   │   ├── stt/            # 音声認識 (Speech-to-Text)
 │   │   │   └── speech_recognizer.py # Whisperによる音声認識
-│   │   ├── tts/            # 音声合成 (Text-to-Speech)
-│   │   │   └── tts_engine.py # VOICEVOXによる音声合成
-│   │   └── voice/          # 音声に関連する追加機能
-│   │       ├── feature_extractor.py # 音声特徴抽出
-│   │       ├── profile_manager.py   # 音声プロファイル管理
-│   │       └── voice_clone_manager.py # ボイスクローン機能
+│   │   └── tts/            # 音声合成 (Text-to-Speech)
+│   │       └── tts_engine.py # VOICEVOX/Parler-TTSによる音声合成
 │   ├── config/             # 設定関連
-│   │   ├── app_config.py   # アプリケーション設定
-│   │   ├── settings_manager.py # 設定管理
-│   │   └── user_settings.py # ユーザー設定
+│   │   └── settings_manager.py # 設定管理
 │   ├── ui/                 # ユーザーインターフェース
 │   │   ├── components/     # UIコンポーネント
-│   │   │   └── message_display.py # メッセージ表示コンポーネント
-│   │   ├── main_window.py  # メインウィンドウ
-│   │   └── voice_profile_dialog.py # ボイスプロファイル設定ダイアログ
+│   │   │   ├── audio_process.py # 音声処理コンポーネント
+│   │   │   └── status_bar.py    # ステータスバー
+│   │   └── main_window/    # メインウィンドウ関連
+│   │       ├── __init__.py # メインウィンドウ
+│   │       └── ui_handler.py # UIイベントハンドラ
 │   ├── utils/              # ユーティリティ
-│   │   ├── error_handler.py # エラー処理
-│   │   ├── file_manager.py # ファイル管理
 │   │   ├── logger.py       # ロギング機能
 │   │   └── model_downloader.py # モデルダウンロード
 │   └── main.py             # エントリーポイント
 ├── models/                 # モデルファイル格納ディレクトリ
-├── profiles/               # ボイスプロファイル保存ディレクトリ
 ├── assets/                 # 画像・アニメーション素材
-├── characters/             # キャラクター設定
 ├── logs/                   # ログファイル
 ├── cache/                  # キャッシュデータ
 ├── config.yml              # 設定ファイル
@@ -133,16 +124,10 @@ KaiwaChan/
 - 会話のエクスポート機能
 
 ### 音声合成 (TTS)
-- VOICEVOXエンジンを利用した自然な日本語音声合成
-- 複数のキャラクターボイス選択が可能
+- VOICEVOXエンジンとParler-TTSを利用した自然な日本語音声合成
+- 複数の音声合成エンジンから選択可能
 - キャッシュ機能による高速な応答
 - カスタマイズ可能な音声パラメータ（速度、音程など）
-
-### ボイスクローン
-- 自分の声や特定の声でキャラクターに話させることが可能
-- 複数のプロファイル管理
-- サンプル音声から特徴を抽出し、声質を変換
-- プロファイルのインポート・エクスポート機能
 
 ### キャラクターアニメーション
 - PyGameを使用した2Dキャラクター表示
@@ -175,6 +160,10 @@ KaiwaChan/
   - **engine_path**: エンジンの実行パス
   - **cache_size**: キャッシュサイズ
   - **timeout**: タイムアウト設定
+- **parler**: Parler-TTSの設定
+  - **model_path**: モデルのパス
+  - **description**: 話者の説明
+  - **cache_size**: キャッシュサイズ
 - **whisper**: 使用するWhisperモデルサイズ
 
 ### logging
@@ -188,7 +177,17 @@ KaiwaChan/
 - **default_id**: デフォルトキャラクターID
 - **expressions**: 表情リスト
 - **window**: ウィンドウサイズ設定
+  - **width**: ウィンドウの幅
+  - **height**: ウィンドウの高さ
+  - **background_color**: 背景色
 - **fps**: アニメーションのFPS
+
+### animation
+- **fps**: アニメーションのFPS
+- **window**: ウィンドウ設定
+  - **width**: ウィンドウの幅
+  - **height**: ウィンドウの高さ
+  - **background_color**: 背景色
 
 ### voice_clone
 - **model_path**: ボイスクローンモデルのパス

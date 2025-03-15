@@ -140,7 +140,7 @@ class SettingsManager:
             },
             'behavior': {
                 'auto_listen': True,
-                'character_name': 'カイワちゃん',
+                'character_name': '会話ちゃん',
                 'prompt_template': "あなたは{character_name}という名前の会話AIです。ユーザーと楽しく会話してください。"
             }
         }

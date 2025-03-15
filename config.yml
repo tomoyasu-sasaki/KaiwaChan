@@ -19,8 +19,8 @@ audio:
 behavior:
   auto_listen: true
   character:
-    name: カイワちゃん
-    personality: 親しみやすく丁寧で、時々ユーモアのある
+    name: 会話ちゃん
+    personality: 高貴な口調で、丁寧で優しく、時々ユーモアのある
     speaking_style: 簡潔で自然な日本語
 logging:
   date_format: '%Y-%m-%d %H:%M:%S'
@@ -41,9 +41,10 @@ models:
   voicevox:
     cache_enabled: true
     cache_size: 100
+    engine_path: ''
     max_retries: 3
     retry_delay: 1.0
-    speaker_id: 72
+    speaker_id: 23
     timeout: 30
     url: http://localhost:50021
   whisper: base
