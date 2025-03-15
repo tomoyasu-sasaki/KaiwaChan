@@ -1,58 +1,42 @@
-# KaiwaChan
+# KaiwaChan (会話ちゃん)
 会話ちゃんシステム - ローカル環境で動作する音声対話可能なAIキャラクターチャットシステム
 
 ## 概要
-KaiwaChanは、プライバシーを重視したローカル完結型の音声対話システムです。音声認識、対話生成、音声合成をすべてローカルで実行します。
+KaiwaChan（会話ちゃん）は、ローカル環境で動作する音声対話可能なAIキャラクターチャットシステムです。ユーザーの音声を認識し、AIによる応答を生成した後、設定されたキャラクターの声で回答する機能を持っています。また、アニメーションキャラクターとの対話も可能です。
 
-## 現在の実装状況（Phase 1）
+## 特徴
+- 音声認識による対話入力（無音検出による自動録音終了機能搭載）
+- ローカル環境で動作するLLMによる応答生成
+- 音声合成（VOICEVOX、Parler-TTS対応）
+- 2Dキャラクターアニメーション表示
+- プロファイル管理機能
+- 詳細なログ出力とデバッグ機能
 
-### 実装済み機能
-- 音声認識 (Whisper)
-- 対話生成 (LLaMA)
-- 音声合成 (VOICEVOX)
-- 基本的なGUIインターフェース
-- 設定管理システム
-- ログ機能
+## 使用技術
+- **Python 3.9+**: 基本言語
+- **PyQt6**: GUIフレームワーク
+- **llama-cpp-python**: ローカルLLM推論エンジン
+- **Granite-3.1-8b-instruct**: 会話生成AI言語モデル
+- **Whisper**: 音声認識（Speech-to-Text）
+- **VOICEVOX**: 音声合成（Text-to-Speech）
+- **Parler-TTS**: 音声合成（Text-to-Speech）
+- **PyGame**: キャラクターアニメーション
+- **NumPy/SciPy**: 信号処理
+- **PyAudio/SoundDevice**: オーディオ入出力
+- **YAML**: 設定ファイル管理
 
-### システム構成
-```
-KaiwaChan/
-├── src/
-│ ├── core/ # コア機能
-│ │ ├── stt.py # 音声認識 (Whisper)
-│ │ ├── dialogue.py # 対話生成 (LLaMA)
-│ │ └── tts.py # 音声合成 (VOICEVOX)
-│ ├── ui/ # ユーザーインターフェース
-│ │ └── main_window.py
-│ └── utils/ # ユーティリティ
-│ ├── config.py # 設定管理
-│ └── logger.py # ログ機能
-├── models/ # モデルファイル
-├── logs/ # ログファイル
-└── config.yml # 設定ファイル
-```
+## システム要件
+- Python 3.9以上
+- MPS対応GPUを推奨（CPU動作も可能）
+- 最低8GB以上のRAM（16GB以上推奨）
+- VOICEVOXエンジン（音声合成に使用）
+- 約15GB以上の空き容量（モデルファイル含む）
 
-### 使用技術
-- **音声認識**: OpenAI Whisper
-- **対話生成**: LLaMA 2
-- **音声合成**: VOICEVOX
-- **GUI**: PyQt6
-- **その他**: numpy, scipy, sounddevice
-
-### 動作要件
-- Python 3.8以上
-- RAM: 16GB以上
-- GPU: VRAM 6GB以上推奨
-- ストレージ: 20GB以上の空き容量
-
-## セットアップ
-
-1. 仮想環境の作成
+## インストール方法
+1. リポジトリをクローン
 ```bash
-python -m venv .kaiwachan
-source .kaiwachan/bin/activate  # Linux/Mac
-# または
-.kaiwachan\Scripts\activate     # Windows
+git clone https://github.com/[username]/KaiwaChan.git
+cd KaiwaChan
 ```
 
 2. 依存関係のインストール
@@ -60,135 +44,180 @@ source .kaiwachan/bin/activate  # Linux/Mac
 pip install -r requirements.txt
 ```
 
-3. 必要なモデルの準備
-- Whisperモデル（自動ダウンロード）
-- LLaMA 2モデル（要別途ダウンロード）
-- VOICEVOXエンジン（要別途インストール）
+3. 必要なモデルファイルのダウンロード
+   - [Granite-3.1-8b-instruct](https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF) をダウンロードして `models/` ディレクトリに配置
+   - VOICEVOX Engineのインストール（[公式サイト](https://voicevox.hiroshiba.jp/)から入手可能）
 
-4. 設定ファイルの確認
-- `config.yml`の内容を環境に合わせて調整
+4. 設定ファイルの確認と調整
+   - `config.yml` ファイルを環境に合わせて調整
 
-5. 実行
+## 使用方法
+1. VOICEVOXエンジンを起動する
+
+2. KaiwaChanを起動する
 ```bash
 python -m src.main
 ```
 
-## 今後の開発予定
-- キャラクター表示システム（Live2D）
-- 音声クローニング機能
-- マルチキャラクター対応
-- プラグインシステム
+3. メインウィンドウが表示されたら「話す」ボタンをクリックして対話を開始
+   - マイクに向かって話しかけると、音声が認識され応答が生成されます
+   - 応答はテキストとして表示され、設定された音声で再生されます
+   - 会話終了後、2秒間の無音が検出されると自動的に録音が終了します
 
-## ライセンス
-[ライセンス情報を追加予定]
+4. 必要に応じてボイスプロファイルを作成・選択することで、好みの声での応答を設定可能
 
-## 機能の処理フロー
-
-### 1. 音声対話の基本フロー
-1. **音声入力** (Whisper)
-   - マイクから音声を録音 (sounddevice)
-   - 音声データをテキストに変換 (OpenAI Whisper)
-   - 使用技術: sounddevice (録音), numpy (音声データ処理)
-
-2. **対話生成** (LLaMA 2)
-   - テキストから文脈を理解
-   - 適切な応答を生成
-   - 使用技術: LLaMA 2 (大規模言語モデル)
-
-3. **音声合成** (VOICEVOX)
-   - 生成されたテキストを音声に変換
-   - キャラクターの声で出力
-   - 使用技術: VOICEVOX (音声合成エンジン)
-
-### 2. システムの主要コンポーネント
-
-#### GUI (PyQt6)
-- メインウィンドウの表示
-- ボタン操作の処理
-- テキスト表示
-- 使用技術: PyQt6 (グラフィカルインターフェース)
-
-#### 設定管理
-- 設定ファイル (YAML) の読み込み
-- モデルパスの管理
-- 音声設定の管理
-- 使用技術: PyYAML (設定ファイル処理)
-
-#### ログ機能
-- システムの動作記録
-- エラー情報の保存
-- デバッグ情報の出力
-- 使用技術: Python logging (ログ管理)
-
-### 3. 技術詳細
-
-#### 音声認識 (Whisper)
-- **用途**: 音声をテキストに変換
-- **特徴**: 
-  - 高精度な音声認識
-  - 多言語対応
-  - ローカルで動作
-- **処理フロー**:
-マイク入力 → 音声データ取得 → ノイズ処理 → Whisperモデルで認識 → テキスト出力
-
-#### 対話生成 (LLaMA 2)
-- **用途**: 自然な対話の生成
-- **特徴**:
-  - 高度な文脈理解
-  - カスタマイズ可能な応答
-  - ローカルで高速処理
-- **処理フロー**:
-テキスト入力 → 文脈理解 → 応答生成 → テキスト出力
-
-#### 音声合成 (VOICEVOX)
-- **用途**: テキストを音声に変換
-- **特徴**:
-  - 高品質な音声合成
-  - 複数のキャラクターボイス
-  - リアルタイム処理
-- **処理フロー**:
-テキスト入力 → 音声パラメータ設定 → 音声合成 → 音声出力
-
-### 4. データの流れ
+## ディレクトリ構造
 ```
-音声入力 → テキスト変換 (Whisper) → 対話生成 (LLaMA 2) → 音声合成 (VOICEVOX) → 音声出力
+KaiwaChan/
+├── src/                    # ソースコード
+│   ├── core/               # コア機能
+│   │   ├── animation/      # アニメーション関連
+│   │   │   ├── character_animator.py  # キャラクターアニメーション管理
+│   │   │   └── sprite_manager.py      # スプライト管理
+│   │   ├── audio/          # オーディオ処理
+│   │   │   ├── player.py   # 音声再生
+│   │   │   ├── processor.py # 音声処理
+│   │   │   └── recorder.py # 音声録音
+│   │   ├── dialogue/       # 対話エンジン
+│   │   │   └── dialogue_engine.py # LLMを使用した対話生成
+│   │   ├── stt/            # 音声認識 (Speech-to-Text)
+│   │   │   └── speech_recognizer.py # Whisperによる音声認識
+│   │   └── tts/            # 音声合成 (Text-to-Speech)
+│   │       └── tts_engine.py # VOICEVOX/Parler-TTSによる音声合成
+│   ├── config/             # 設定関連
+│   │   └── settings_manager.py # 設定管理
+│   ├── ui/                 # ユーザーインターフェース
+│   │   ├── components/     # UIコンポーネント
+│   │   │   ├── audio_process.py # 音声処理コンポーネント
+│   │   │   └── status_bar.py    # ステータスバー
+│   │   └── main_window/    # メインウィンドウ関連
+│   │       ├── __init__.py # メインウィンドウ
+│   │       └── ui_handler.py # UIイベントハンドラ
+│   ├── utils/              # ユーティリティ
+│   │   ├── logger.py       # ロギング機能
+│   │   └── model_downloader.py # モデルダウンロード
+│   └── main.py             # エントリーポイント
+├── models/                 # モデルファイル格納ディレクトリ
+├── assets/                 # 画像・アニメーション素材
+├── logs/                   # ログファイル
+├── cache/                  # キャッシュデータ
+├── config.yml              # 設定ファイル
+└── requirements.txt        # 依存パッケージリスト
 ```
 
-各ステップでのデータ形式:
-1. 音声入力: WAVデータ (numpy配列)
-2. テキスト変換: 文字列
-3. 対話生成: 文字列
-4. 音声合成: WAVデータ
+## 主要機能の説明
 
-### 5. 使用ライブラリと役割
-- **numpy**: 音声データの数値処理
-- **scipy**: 信号処理とフィルタリング
-- **sounddevice**: マイク入力の制御
-- **PyQt6**: グラフィカルインターフェース
-- **requests**: VOICEVOXとの通信
-- **yaml**: 設定ファイルの処理
-- **logging**: システムログの管理
+### 音声認識 (STT)
+- Whisperモデルを使用した高精度な音声認識
+- 無音検出による自動録音終了（改良版）
+  - 設定ファイルで調整可能なsilence_threshold値
+  - 有声検出後の無音のみを終了判定に使用（雑音対策）
+  - 2秒間（デフォルト）の無音検出で自動終了
+- 日本語に最適化された設定
+- タイムスタンプ付き認識にも対応
 
-## 開発状況
+### 対話エンジン
+- Granite-3.1-8b-instructモデルを使用
+- ローカル環境での高速な応答生成
+- キャラクターに合わせたパーソナリティの調整が可能
+- 会話履歴の保持と管理
+- 会話のエクスポート機能
 
-### Phase 1 ✅
-- 基本的な音声認識/合成
-- 対話生成
-- UIの基本実装
+### 音声合成 (TTS)
+- VOICEVOXエンジンとParler-TTSを利用した自然な日本語音声合成
+- 複数の音声合成エンジンから選択可能
+- キャッシュ機能による高速な応答
+- カスタマイズ可能な音声パラメータ（速度、音程など）
 
-### Phase 2 🚧
-- キャラクター表示システム
-- アニメーション制御
-- 音声同期
+### キャラクターアニメーション
+- PyGameを使用した2Dキャラクター表示
+- 表情変化や口パクアニメーション
+- 会話状態に応じたアニメーション切り替え
+- カスタマイズ可能なアニメーション設定
+
+### ロギングシステム
+- 詳細なログレベル設定（DEBUG、INFO、WARNING、ERROR、CRITICAL）
+- 設定ファイルでログレベルを調整可能
+- ファイルとコンソールへの出力
+- ローテーションによるログファイル管理
+
+## 設定ファイル（config.yml）の説明
+
+### audio
+- **duration**: デフォルトの最大録音時間（秒）
+- **sample_rate**: サンプルレート（Hz）
+- **channels**: チャンネル数
+- **device**: 使用するオーディオデバイス（nullの場合はデフォルト）
+- **silence_threshold**: 無音判定の閾値（0.03推奨）
+
+### models
+- **llm**: LLMモデルの設定
+  - **file**: 使用するモデルファイル
+  - **n_threads**: 使用するスレッド数
+  - **n_batch**: バッチサイズ
+  - **max_tokens**: 最大生成トークン数
+- **voicevox**: VOICEVOXエンジンの設定
+  - **engine_path**: エンジンの実行パス
+  - **cache_size**: キャッシュサイズ
+  - **timeout**: タイムアウト設定
+- **parler**: Parler-TTSの設定
+  - **model_path**: モデルのパス
+  - **description**: 話者の説明
+  - **cache_size**: キャッシュサイズ
+- **whisper**: 使用するWhisperモデルサイズ
+
+### logging
+- **level**: ログレベル（DEBUG=10, INFO=20, WARNING=30, ERROR=40, CRITICAL=50）
+- **format**: ログフォーマット
+- **date_format**: 日付フォーマット
+- **max_files**: 保存する最大ログファイル数
+- **max_size_mb**: 各ログファイルの最大サイズ（MB）
+
+### character
+- **default_id**: デフォルトキャラクターID
+- **expressions**: 表情リスト
+- **window**: ウィンドウサイズ設定
+  - **width**: ウィンドウの幅
+  - **height**: ウィンドウの高さ
+  - **background_color**: 背景色
+- **fps**: アニメーションのFPS
+
+### animation
+- **fps**: アニメーションのFPS
+- **window**: ウィンドウ設定
+  - **width**: ウィンドウの幅
+  - **height**: ウィンドウの高さ
+  - **background_color**: 背景色
+
+### voice_clone
+- **model_path**: ボイスクローンモデルのパス
+- **profiles_dir**: プロファイル保存ディレクトリ
+- **sample_rate**: サンプルレート
+- **chunk_size**: チャンクサイズ
+- **feature_dim**: 特徴次元数
+
+## カスタマイズと拡張
+- `config.yml`ファイルで各種設定を調整可能
+- 無音検出の閾値（`silence_threshold`）を環境に合わせて調整することで、音声入力の精度を向上
+- `characters/`ディレクトリにキャラクター設定を追加することで拡張可能
+- 音声プロファイルをカスタマイズしてオリジナルの声を作成可能
+- ログレベルを変更することで、デバッグや問題解決に必要な情報を表示可能
+
+## トラブルシューティング
+- VOICEVOXエンジンが動作していない場合、音声合成機能は使用できません
+- GPUメモリ不足の場合は、`config.yml`のモデル設定を調整してみてください
+- 音声認識の精度が低い場合は、静かな環境で使用するか、マイク設定を確認してください
+- 無音検出が正しく機能しない場合は、`config.yml`の`silence_threshold`値を環境に合わせて調整してください
+  - 値を上げる: 背景ノイズが多い環境での無音検出精度向上
+  - 値を下げる: 静かな環境での検出感度向上
 
 ## ライセンス
-MIT License
-
-## 貢献
-プルリクエストやイシューの報告を歓迎します。
+このプロジェクトは[ライセンス名]の下で公開されています。詳細はLICENSEファイルを参照してください。
 
 ## 謝辞
-- [Whisper](https://github.com/openai/whisper)
-- [VOICEVOX](https://voicevox.hiroshiba.jp/)
-- [LLaMA](https://github.com/facebookresearch/llama)
-- [PyGame](https://www.pygame.org/)
+- [Whisper](https://github.com/openai/whisper): 音声認識モデル
+- [VOICEVOX](https://voicevox.hiroshiba.jp/): 音声合成エンジン
+- [Llama.cpp](https://github.com/ggerganov/llama.cpp): 高速なLLM推論エンジン
+- [Granite](https://huggingface.co/lmstudio-community/granite-3.1-8b-instruct-GGUF): 高品質な言語モデル
+- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/): GUIフレームワーク
+- [SoundDevice](https://python-sounddevice.readthedocs.io/): オーディオ入出力ライブラリ
